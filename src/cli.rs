@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 use crate::commands::{doctor, setup::SetupCommand, status};
 
@@ -37,7 +37,9 @@ pub fn run() -> Result<()> {
         Some(Command::Status) => status::run(),
         Some(Command::Doctor) => doctor::run(),
         None => {
-            Cli::parse_from(["eternalMac", "--help"]);
+            let mut command = Cli::command();
+            command.print_help()?;
+            println!();
         }
     }
     Ok(())
