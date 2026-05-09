@@ -1,10 +1,12 @@
 use eternalmac::app::paths::Paths;
 use eternalmac::config::store::Store;
-use eternalmac::model::config::{Config, Role, ServerConfig, SessionConfig};
+use eternalmac::model::config::{
+    ClientConfig, Config, Role, ServerConfig, SessionConfig, SyncPairConfig,
+};
 use eternalmac::model::state::State;
 
 #[test]
-fn config_round_trip_preserves_role_and_default_session() {
+fn config_round_trip_preserves_server_dns_and_client_sync_pairs() {
     let tempdir = tempfile::tempdir().unwrap();
     let paths = Paths::new(tempdir.path().to_path_buf());
     let store = Store::new(paths.clone());
@@ -15,8 +17,18 @@ fn config_round_trip_preserves_role_and_default_session() {
             host_label: "mac-mini".into(),
             default_session: "default".into(),
             boot_sessions: vec!["default".into()],
+            tailscale_dns: Some("eternalmac.local".into()),
         }),
-        client: None,
+        client: Some(ClientConfig {
+            paired_server: "server-1".into(),
+            pinned: vec!["workspace".into()],
+            sync_pairs: vec![SyncPairConfig {
+                name: "docs".into(),
+                local: "/Users/me/Documents".into(),
+                remote: "/Volumes/docs".into(),
+                mode: "mirror".into(),
+            }],
+        }),
         session: SessionConfig { auto_attach: true },
     };
 
@@ -25,10 +37,34 @@ fn config_round_trip_preserves_role_and_default_session() {
 
     assert!(matches!(loaded.role, Role::Server));
     assert_eq!(loaded.server.as_ref().unwrap().default_session, "default");
-    assert!(loaded.client.is_none());
+    assert_eq!(
+        loaded
+            .server
+            .as_ref()
+            .and_then(|server| server.tailscale_dns.clone()),
+        Some("eternalmac.local".into())
+    );
+    assert_eq!(loaded.client.as_ref().unwrap().sync_pairs.len(), 1);
+    assert_eq!(loaded.client.as_ref().unwrap().sync_pairs[0].name, "docs");
     assert_eq!(
         paths.config_file,
         tempdir.path().join(".config/eternalmac/config.toml")
+    );
+    assert_eq!(
+        paths.launch_agents_dir,
+        tempdir.path().join("Library/LaunchAgents")
+    );
+    assert_eq!(
+        paths.server_plist,
+        tempdir
+            .path()
+            .join("Library/LaunchAgents/com.eternalmac.server.plist")
+    );
+    assert_eq!(
+        paths.client_plist,
+        tempdir
+            .path()
+            .join("Library/LaunchAgents/com.eternalmac.client.plist")
     );
     assert_eq!(
         paths.state_file,
@@ -52,10 +88,26 @@ fn save_state_writes_state_file_to_state_location() {
         server_reachable: true,
         healthy: true,
         summary: "ok".into(),
+        tailscale_dns: Some("eternalmac.local".into()),
+        daemon_healthy: true,
+        daemon_heartbeat_unix: 1_714_000_000,
+        default_session_present: true,
+        known_sessions: vec!["default".into(), "sync".into()],
+        syncs: vec![eternalmac::model::state::SyncPairState {
+            name: "docs".into(),
+            local: "/Users/me/Documents".into(),
+            remote: "/Volumes/docs".into(),
+            mode: "mirror".into(),
+            status: "synced".into(),
+        }],
     };
 
     store.save_state(&state).unwrap();
+    let loaded = store.load_state().unwrap();
 
     assert!(paths.state_file.exists());
     assert!(!paths.config_file.exists());
+    assert_eq!(loaded.daemon_heartbeat_unix, 1_714_000_000);
+    assert_eq!(loaded.known_sessions, vec!["default", "sync"]);
+    assert_eq!(loaded.syncs[0].status, "synced");
 }

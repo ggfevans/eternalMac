@@ -34,4 +34,9 @@ impl Store {
         fs::write(&self.paths.state_file, serialized)?;
         Ok(())
     }
+
+    pub fn load_state(&self) -> Result<State> {
+        let raw = fs::read_to_string(&self.paths.state_file)?;
+        Ok(serde_json::from_str(&raw)?)
+    }
 }
