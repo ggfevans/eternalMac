@@ -1,12 +1,12 @@
 use eternalmac::commands::sync::{add_output, list_output, status_output};
 use eternalmac::sync::service::build_pair;
-use eternalmac::tooling::mutagen::build_create_args;
+use eternalmac::tooling::mutagen::{build_create_args, SYNC_MODE_TWO_WAY_RESOLVED};
 
 #[test]
-fn sync_pair_defaults_to_last_write_wins() {
+fn sync_pair_uses_the_normalized_mutagen_mode() {
     let pair = build_pair("project", "~/src/project", "~/remote/project");
     assert_eq!(pair.name, "project");
-    assert_eq!(pair.mode, "last-write-wins");
+    assert_eq!(pair.mode, SYNC_MODE_TWO_WAY_RESOLVED);
 }
 
 #[test]
@@ -28,6 +28,15 @@ fn mutagen_create_args_include_sync_mode_in_order() {
         .map(String::from)
         .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn sync_pair_uses_the_same_mode_as_mutagen_create_args() {
+    let pair = build_pair("project", "~/src/project", "~/remote/project");
+    let args = build_create_args("project", "~/src/project", "~/remote/project");
+
+    assert_eq!(pair.mode, SYNC_MODE_TWO_WAY_RESOLVED);
+    assert!(args.iter().any(|value| value == SYNC_MODE_TWO_WAY_RESOLVED));
 }
 
 #[test]

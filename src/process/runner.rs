@@ -10,14 +10,14 @@ pub struct Output {
 }
 
 pub trait Runner {
-    fn run(&self, program: &str, args: &[&str]) -> Result<Output>;
+    fn run(&self, program: &str, args: &[String]) -> Result<Output>;
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct SystemRunner;
 
 impl Runner for SystemRunner {
-    fn run(&self, program: &str, args: &[&str]) -> Result<Output> {
+    fn run(&self, program: &str, args: &[String]) -> Result<Output> {
         let output = Command::new(program)
             .args(args)
             .output()

@@ -32,8 +32,10 @@ pub mod setup {
     pub mod server;
 }
 pub mod tooling {
+    pub mod brew;
     pub mod dependencies;
     pub mod et;
     pub mod mutagen;
+    pub mod tailscale;
     pub mod tmux;
 }

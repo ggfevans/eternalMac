@@ -21,15 +21,22 @@ impl Inspector {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DependencyPlan {
-    pub packages: Vec<String>,
+    pub formulae: Vec<String>,
+    pub casks: Vec<String>,
 }
 
 pub fn build_dependency_plan(inspector: &Inspector) -> DependencyPlan {
-    let required = ["et", "tmux", "mutagen", "tailscale"];
-    let packages = required
+    let formulae = ["et", "tmux", "mutagen"]
         .into_iter()
         .filter(|name| !inspector.has(name))
         .map(String::from)
         .collect();
-    DependencyPlan { packages }
+
+    let casks = ["tailscale-app"]
+        .into_iter()
+        .filter(|name| !inspector.has(name))
+        .map(String::from)
+        .collect();
+
+    DependencyPlan { formulae, casks }
 }
