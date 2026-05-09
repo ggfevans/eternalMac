@@ -23,6 +23,9 @@ pub mod process {
 pub mod session {
     pub mod service;
 }
+pub mod sync {
+    pub mod service;
+}
 pub mod setup {
     pub mod client;
     pub mod server;
@@ -30,5 +33,6 @@ pub mod setup {
 pub mod tooling {
     pub mod dependencies;
     pub mod et;
+    pub mod mutagen;
     pub mod tmux;
 }
