@@ -32,16 +32,16 @@ struct RawStatus {
 pub fn detect_variant(installed_apps: &[String]) -> Variant {
     if installed_apps
         .iter()
-        .any(|path| path.ends_with("/Applications/Tailscale.app"))
+        .any(|path| path.contains("Tailscale") && path.contains("App Store"))
     {
-        return Variant::Standalone;
+        return Variant::AppStore;
     }
 
     if installed_apps
         .iter()
-        .any(|path| path.contains("Tailscale (App Store)"))
+        .any(|path| path.ends_with("/Applications/Tailscale.app"))
     {
-        return Variant::AppStore;
+        return Variant::Standalone;
     }
 
     if installed_apps

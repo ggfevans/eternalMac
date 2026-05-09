@@ -34,6 +34,33 @@ fn tailscale_status_parser_extracts_backend_state_and_dns() {
 }
 
 #[test]
+fn tailscale_variant_detection_detects_app_store_variant() {
+    let variant = detect_variant(&[
+        "/Applications/Tailscale.app".into(),
+        "/Applications/Tailscale (App Store).app".into(),
+    ]);
+
+    assert_eq!(variant, Variant::AppStore);
+}
+
+#[test]
+fn tailscale_variant_detection_detects_open_source_variant() {
+    let variant = detect_variant(&[
+        "/opt/homebrew/bin/tailscaled".into(),
+        "/usr/local/bin/tailscale".into(),
+    ]);
+
+    assert_eq!(variant, Variant::OpenSource);
+}
+
+#[test]
+fn tailscale_variant_detection_returns_unknown_without_markers() {
+    let variant = detect_variant(&["/Applications/Other.app".into()]);
+
+    assert_eq!(variant, Variant::Unknown);
+}
+
+#[test]
 fn tailscale_variant_detection_accepts_standalone_app() {
     let variant = detect_variant(&[
         "/Applications/Tailscale.app".into(),
