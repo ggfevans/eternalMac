@@ -6,11 +6,21 @@ pub struct Definition {
     pub keep_alive: bool,
 }
 
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 pub fn render(definition: &Definition) -> String {
+    let label = escape_xml(&definition.label);
     let args = definition
         .program_arguments
         .iter()
-        .map(|arg| format!("<string>{arg}</string>"))
+        .map(|arg| format!("<string>{}</string>", escape_xml(arg)))
         .collect::<Vec<_>>()
         .join("");
 
@@ -23,7 +33,7 @@ pub fn render(definition: &Definition) -> String {
 <key>RunAtLoad</key><{}/>
 <key>KeepAlive</key><{}/>
 </dict></plist>"#,
-        definition.label,
+        label,
         args,
         if definition.run_at_load {
             "true"
