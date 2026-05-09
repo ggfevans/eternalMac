@@ -1,3 +1,8 @@
+use std::fs;
+use std::path::Path;
+
+use anyhow::Result;
+
 #[derive(Debug, Clone)]
 pub struct Definition {
     pub label: String,
@@ -46,4 +51,12 @@ pub fn render(definition: &Definition) -> String {
             "false"
         },
     )
+}
+
+pub fn write_plist(path: &Path, definition: &Definition) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, render(definition))?;
+    Ok(())
 }

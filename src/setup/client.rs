@@ -1,19 +1,125 @@
+use anyhow::Result;
+
+use crate::app::paths::Paths;
+use crate::config::store::Store;
+use crate::model::config::{ClientConfig, Config, Role, SessionConfig, SyncPairConfig};
+use crate::model::state::{State, SyncPairState};
+use crate::platform::launchd::{write_plist, Definition};
+use crate::process::runner::Runner;
+use crate::tooling::brew::{install_cask_args, install_formula_args};
+use crate::tooling::mutagen::{build_create_args, SYNC_MODE_TWO_WAY_RESOLVED};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClientPlan {
-    pub role: &'static str,
-    pub paired_server: String,
-    pub brew_packages: Vec<String>,
+pub struct SyncRootInput {
+    pub name: String,
+    pub local: String,
+    pub remote: String,
 }
 
-pub fn build_client_plan(server: &str) -> ClientPlan {
-    ClientPlan {
-        role: "client",
-        paired_server: server.to_string(),
-        brew_packages: vec![
-            "et".into(),
-            "tmux".into(),
-            "mutagen".into(),
-            "tailscale-app".into(),
-        ],
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSetupInput {
+    pub paired_server: String,
+    pub sync_roots: Vec<SyncRootInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSetupSummary {
+    pub paired_server: String,
+    pub sync_names: Vec<String>,
+}
+
+pub fn apply_client_setup<R: Runner>(
+    paths: &Paths,
+    store: &Store,
+    runner: &R,
+    input: ClientSetupInput,
+) -> Result<ClientSetupSummary> {
+    let formulae = vec!["et".into(), "tmux".into(), "mutagen".into()];
+    if let Some(args) = install_formula_args(&formulae) {
+        runner.run("brew", &args)?;
     }
+
+    let cask_args = install_cask_args("tailscale-app");
+    runner.run("brew", &cask_args)?;
+
+    let sync_pairs = input
+        .sync_roots
+        .iter()
+        .map(|root| SyncPairConfig {
+            name: root.name.clone(),
+            local: root.local.clone(),
+            remote: root.remote.clone(),
+            mode: SYNC_MODE_TWO_WAY_RESOLVED.into(),
+        })
+        .collect::<Vec<_>>();
+
+    for root in &input.sync_roots {
+        let args = build_create_args(&root.name, &root.local, &root.remote);
+        runner.run("mutagen", &args)?;
+    }
+
+    let sync_names = sync_pairs
+        .iter()
+        .map(|pair| pair.name.clone())
+        .collect::<Vec<_>>();
+
+    store.save_config(&Config {
+        role: Role::Client,
+        server: None,
+        client: Some(ClientConfig {
+            paired_server: input.paired_server.clone(),
+            pinned: vec![],
+            sync_pairs: sync_pairs.clone(),
+        }),
+        session: SessionConfig { auto_attach: true },
+    })?;
+
+    store.save_state(&State {
+        role: Role::Client,
+        tailscale_ok: true,
+        server_reachable: true,
+        healthy: true,
+        summary: "client ready".into(),
+        tailscale_dns: None,
+        daemon_healthy: true,
+        daemon_heartbeat_unix: 0,
+        default_session_present: false,
+        known_sessions: vec![],
+        syncs: sync_pairs
+            .iter()
+            .map(|pair| SyncPairState {
+                name: pair.name.clone(),
+                local: pair.local.clone(),
+                remote: pair.remote.clone(),
+                mode: pair.mode.clone(),
+                status: "created".into(),
+            })
+            .collect(),
+    })?;
+
+    write_plist(
+        &paths.client_plist,
+        &Definition {
+            label: "com.eternalmac.client".into(),
+            program_arguments: vec![
+                "/opt/homebrew/bin/eternalMac".into(),
+                "daemon".into(),
+                "client".into(),
+            ],
+            run_at_load: true,
+            keep_alive: true,
+        },
+    )?;
+
+    let launchctl_args = vec![
+        "load".into(),
+        "-w".into(),
+        paths.client_plist.display().to_string(),
+    ];
+    runner.run("launchctl", &launchctl_args)?;
+
+    Ok(ClientSetupSummary {
+        paired_server: input.paired_server,
+        sync_names,
+    })
 }
