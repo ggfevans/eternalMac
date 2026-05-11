@@ -148,16 +148,10 @@ pub fn run() -> Result<()> {
         }
         Some(Command::Daemon {
             target: DaemonAction::Server,
-        }) => {
-            daemon::run_server();
-            Ok(())
-        }
+        }) => daemon::run_server(),
         Some(Command::Daemon {
             target: DaemonAction::Client,
-        }) => {
-            daemon::run_client();
-            Ok(())
-        }
+        }) => daemon::run_client(),
         None => {
             use clap::CommandFactory;
             Cli::command().print_help()?;

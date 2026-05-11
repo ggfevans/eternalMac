@@ -1,3 +1,14 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use anyhow::{anyhow, Context, Result};
+
+use crate::app::paths::Paths;
+use crate::config::store::Store;
+use crate::model::state::{State, SyncPairState};
+use crate::process::runner::{Output, Runner};
+use crate::tooling::mutagen::list_args;
+use crate::tooling::tailscale::{parse_status_json, status_args};
+
 #[derive(Debug, Clone)]
 pub struct ClientInput {
     pub pinned_sessions: Vec<String>,
@@ -21,4 +32,78 @@ pub fn reconcile_client(input: ClientInput) -> ClientState {
         auto_attach: input.pinned_sessions,
         healthy: true,
     }
+}
+
+fn run_checked<R: Runner>(runner: &R, program: &str, args: &[String]) -> Result<Output> {
+    let output = runner.run(program, args)?;
+    if output.success {
+        return Ok(output);
+    }
+
+    let mut message = format!("command failed: {program} {}", args.join(" "));
+    if !output.stderr.trim().is_empty() {
+        message.push_str(&format!("; stderr: {}", output.stderr.trim()));
+    }
+
+    Err(anyhow!(message))
+}
+
+fn current_unix_seconds() -> Result<i64> {
+    let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    i64::try_from(seconds).context("unix timestamp overflow converting u64 to i64")
+}
+
+fn sync_status(mutagen_output: &str, sync_name: &str) -> String {
+    if mutagen_output.lines().any(|line| line.contains(sync_name)) {
+        return "active".into();
+    }
+
+    "missing".into()
+}
+
+pub fn run_once<R: Runner>(_paths: &Paths, store: &Store, runner: &R) -> Result<()> {
+    let config = store.load_config()?;
+    let client = config
+        .client
+        .as_ref()
+        .context("client daemon requires client config")?;
+
+    let tailscale_output = run_checked(runner, "tailscale", &status_args())?;
+    let tailscale_status = parse_status_json(&tailscale_output.stdout)?;
+    let tailscale_ok = tailscale_status.backend_state == "Running";
+
+    let mutagen_output = run_checked(runner, "mutagen", &list_args())?;
+    let syncs = client
+        .sync_pairs
+        .iter()
+        .map(|sync_pair| SyncPairState {
+            name: sync_pair.name.clone(),
+            local: sync_pair.local.clone(),
+            remote: sync_pair.remote.clone(),
+            mode: sync_pair.mode.clone(),
+            status: sync_status(&mutagen_output.stdout, &sync_pair.name),
+        })
+        .collect::<Vec<_>>();
+    let all_syncs_active = syncs.iter().all(|sync| sync.status == "active");
+    let healthy = tailscale_ok && all_syncs_active;
+
+    store.save_state(&State {
+        role: config.role,
+        tailscale_ok,
+        server_reachable: tailscale_ok,
+        healthy,
+        summary: if healthy {
+            "client daemon healthy".into()
+        } else {
+            "client daemon degraded".into()
+        },
+        tailscale_dns: tailscale_status.dns_name,
+        daemon_healthy: true,
+        daemon_heartbeat_unix: current_unix_seconds()?,
+        default_session_present: false,
+        known_sessions: vec![],
+        syncs,
+    })?;
+
+    Ok(())
 }

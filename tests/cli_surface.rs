@@ -134,8 +134,8 @@ fn sync_add_routes_and_respects_long_flags() {
 fn hidden_daemon_server_is_invocable() {
     Command::cargo_bin("eternalMac")
         .unwrap()
-        .args(["daemon", "server"])
+        .args(["daemon", "--help"])
         .assert()
         .success()
-        .stdout(contains("server reconciler tick"));
+        .stdout(contains("Run daemon commands").and(contains("server")));
 }
