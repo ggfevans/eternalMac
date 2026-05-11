@@ -52,7 +52,15 @@ fn persist_config_and_state(
     config: &Config,
     state: &State,
 ) -> Result<()> {
-    let prior_config = fs::read(&paths.config_file).ok();
+    let prior_config = match fs::read(&paths.config_file) {
+        Ok(previous) => Some(previous),
+        Err(error) if error.kind() == ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(anyhow!(
+                "failed to snapshot existing config before setup write: {error}"
+            ));
+        }
+    };
     store.save_config(config)?;
 
     if let Err(state_error) = store.save_state(state) {
@@ -118,6 +126,16 @@ pub fn apply_client_setup<R: Runner>(
         }),
         session: SessionConfig { auto_attach: true },
     };
+    let mut sync_states = sync_pairs
+        .iter()
+        .map(|pair| SyncPairState {
+            name: pair.name.clone(),
+            local: pair.local.clone(),
+            remote: pair.remote.clone(),
+            mode: pair.mode.clone(),
+            status: "pending".into(),
+        })
+        .collect::<Vec<_>>();
     persist_config_and_state(
         paths,
         store,
@@ -133,53 +151,35 @@ pub fn apply_client_setup<R: Runner>(
             daemon_heartbeat_unix: 0,
             default_session_present: false,
             known_sessions: vec![],
-            syncs: sync_pairs
-                .iter()
-                .map(|pair| SyncPairState {
-                    name: pair.name.clone(),
-                    local: pair.local.clone(),
-                    remote: pair.remote.clone(),
-                    mode: pair.mode.clone(),
-                    status: "pending".into(),
-                })
-                .collect(),
+            syncs: sync_states.clone(),
         },
     )?;
 
-    for root in &input.sync_roots {
+    let mut created_sync_count = 0usize;
+    for (index, root) in input.sync_roots.iter().enumerate() {
         let args = build_create_args(&root.name, &root.local, &root.remote);
         run_checked(runner, "mutagen", &args)?;
+        sync_states[index].status = "created".into();
+        created_sync_count += 1;
+        store.save_state(&State {
+            role: Role::Client,
+            tailscale_ok,
+            server_reachable: created_sync_count > 0,
+            healthy: false,
+            summary: "client setup in progress; finalizing sync prerequisites".into(),
+            tailscale_dns: None,
+            daemon_healthy: false,
+            daemon_heartbeat_unix: 0,
+            default_session_present: false,
+            known_sessions: vec![],
+            syncs: sync_states.clone(),
+        })?;
     }
 
     let sync_names = sync_pairs
         .iter()
         .map(|pair| pair.name.clone())
         .collect::<Vec<_>>();
-
-    let server_reachable = !sync_pairs.is_empty();
-    let healthy = tailscale_ok && server_reachable;
-    store.save_state(&State {
-        role: Role::Client,
-        tailscale_ok,
-        server_reachable,
-        healthy,
-        summary: "client setup complete; runtime health pending".into(),
-        tailscale_dns: None,
-        daemon_healthy: false,
-        daemon_heartbeat_unix: 0,
-        default_session_present: false,
-        known_sessions: vec![],
-        syncs: sync_pairs
-            .iter()
-            .map(|pair| SyncPairState {
-                name: pair.name.clone(),
-                local: pair.local.clone(),
-                remote: pair.remote.clone(),
-                mode: pair.mode.clone(),
-                status: "created".into(),
-            })
-            .collect(),
-    })?;
 
     write_plist(
         &paths.client_plist,
@@ -201,6 +201,22 @@ pub fn apply_client_setup<R: Runner>(
         paths.client_plist.display().to_string(),
     ];
     run_checked(runner, "launchctl", &launchctl_args)?;
+
+    let server_reachable = !sync_pairs.is_empty();
+    let healthy = tailscale_ok && server_reachable;
+    store.save_state(&State {
+        role: Role::Client,
+        tailscale_ok,
+        server_reachable,
+        healthy,
+        summary: "client setup complete; runtime health pending".into(),
+        tailscale_dns: None,
+        daemon_healthy: false,
+        daemon_heartbeat_unix: 0,
+        default_session_present: false,
+        known_sessions: vec![],
+        syncs: sync_states,
+    })?;
 
     Ok(ClientSetupSummary {
         paired_server: input.paired_server,

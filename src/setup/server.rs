@@ -39,7 +39,15 @@ fn persist_config_and_state(
     config: &Config,
     state: &State,
 ) -> Result<()> {
-    let prior_config = fs::read(&paths.config_file).ok();
+    let prior_config = match fs::read(&paths.config_file) {
+        Ok(previous) => Some(previous),
+        Err(error) if error.kind() == ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(anyhow!(
+                "failed to snapshot existing config before setup write: {error}"
+            ));
+        }
+    };
     store.save_config(config)?;
 
     if let Err(state_error) = store.save_state(state) {
@@ -122,22 +130,6 @@ pub fn apply_server_setup<R: Runner>(
     let tmux_args = new_session_args(&default_session);
     run_checked(runner, "tmux", &tmux_args)?;
 
-    let server_reachable = true;
-    let healthy = tailscale_ok && server_reachable;
-    store.save_state(&State {
-        role: Role::Server,
-        tailscale_ok,
-        server_reachable,
-        healthy,
-        summary: "server setup complete; runtime health pending".into(),
-        tailscale_dns: Some(dns_name.clone()),
-        daemon_healthy: false,
-        daemon_heartbeat_unix: 0,
-        default_session_present: true,
-        known_sessions: vec![default_session.clone()],
-        syncs: vec![],
-    })?;
-
     write_plist(
         &paths.server_plist,
         &Definition {
@@ -158,6 +150,22 @@ pub fn apply_server_setup<R: Runner>(
         paths.server_plist.display().to_string(),
     ];
     run_checked(runner, "launchctl", &launchctl_args)?;
+
+    let server_reachable = true;
+    let healthy = tailscale_ok && server_reachable;
+    store.save_state(&State {
+        role: Role::Server,
+        tailscale_ok,
+        server_reachable,
+        healthy,
+        summary: "server setup complete; runtime health pending".into(),
+        tailscale_dns: Some(dns_name.clone()),
+        daemon_healthy: false,
+        daemon_heartbeat_unix: 0,
+        default_session_present: true,
+        known_sessions: vec![default_session.clone()],
+        syncs: vec![],
+    })?;
 
     Ok(ServerSetupSummary {
         dns_name,
