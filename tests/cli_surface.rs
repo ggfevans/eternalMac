@@ -69,7 +69,13 @@ fn setup_help_mentions_server_and_client_targets() {
         .args(["setup", "--help"])
         .assert()
         .success()
-        .stdout(contains("server").and(contains("client")));
+        .stdout(
+            contains("Commands:")
+                .and(contains(
+                    "server  Configure this machine as the setup server",
+                ))
+                .and(contains("client  Configure this machine as a setup client")),
+        );
 }
 
 #[test]
@@ -80,7 +86,9 @@ fn setup_client_help_keeps_server_override_optional() {
         .assert()
         .success()
         .stdout(
-            contains("Usage: eternalMac setup client [OPTIONS]").and(contains("--server <SERVER>")),
+            contains("Usage: eternalMac setup client [OPTIONS]").and(contains(
+                "--server <SERVER>  Override the server DNS name to pair with",
+            )),
         );
 }
 

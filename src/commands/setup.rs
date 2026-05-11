@@ -10,9 +10,15 @@ const DEFAULT_SERVER_HOST_LABEL: &str = "mac-mini";
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum SetupCommand {
+    #[command(about = "Configure this machine as the setup server")]
     Server,
+    #[command(about = "Configure this machine as a setup client")]
     Client {
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Override the server DNS name to pair with",
+            value_name = "SERVER"
+        )]
         server: Option<String>,
     },
 }

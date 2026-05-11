@@ -3,12 +3,21 @@ use dialoguer::{Confirm, Input};
 
 use crate::setup::client::SyncRootInput;
 
+fn validate_non_empty_trimmed(value: &str, field_label: &str) -> std::result::Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{field_label} cannot be empty"));
+    }
+    Ok(())
+}
+
 pub fn prompt_server_dns(prefilled: Option<String>) -> Result<String> {
-    let mut prompt = Input::<String>::new().with_prompt("Server Tailscale DNS name");
+    let mut prompt = Input::<String>::new()
+        .with_prompt("Server Tailscale DNS name")
+        .validate_with(|input: &String| validate_non_empty_trimmed(input, "Server DNS"));
     if let Some(prefilled) = prefilled {
         prompt = prompt.with_initial_text(prefilled);
     }
-    Ok(prompt.interact_text()?)
+    Ok(prompt.interact_text()?.trim().to_string())
 }
 
 pub fn suggest_remote_path(local_path: &str) -> String {
@@ -39,14 +48,22 @@ pub fn suggest_remote_path(local_path: &str) -> String {
 pub fn prompt_sync_pair(server_dns: &str, index: usize) -> Result<SyncRootInput> {
     let name: String = Input::new()
         .with_prompt(format!("Sync root #{index} name"))
+        .validate_with(|input: &String| validate_non_empty_trimmed(input, "Sync name"))
         .interact_text()?;
+    let name = name.trim().to_string();
+
     let local: String = Input::new()
         .with_prompt(format!("Sync root #{index} local path"))
+        .validate_with(|input: &String| validate_non_empty_trimmed(input, "Local path"))
         .interact_text()?;
+    let local = local.trim().to_string();
+
     let remote: String = Input::new()
         .with_prompt(format!("Sync root #{index} remote destination"))
         .with_initial_text(format!("{}:{}", server_dns, suggest_remote_path(&local)))
+        .validate_with(|input: &String| validate_non_empty_trimmed(input, "Remote destination"))
         .interact_text()?;
+    let remote = remote.trim().to_string();
 
     Ok(SyncRootInput {
         name,
@@ -70,7 +87,7 @@ pub fn prompt_sync_roots(server_dns: &str) -> Result<Vec<SyncRootInput>> {
 
 #[cfg(test)]
 mod tests {
-    use super::suggest_remote_path;
+    use super::{suggest_remote_path, validate_non_empty_trimmed};
 
     #[test]
     fn suggests_home_relative_path_for_user_home() {
@@ -94,5 +111,15 @@ mod tests {
     fn prefixes_relative_paths_under_home() {
         assert_eq!(suggest_remote_path("project"), "~/project");
         assert_eq!(suggest_remote_path("./project"), "~/project");
+    }
+
+    #[test]
+    fn rejects_blank_required_prompt_values() {
+        assert!(validate_non_empty_trimmed("   ", "Sync name").is_err());
+    }
+
+    #[test]
+    fn accepts_non_blank_required_prompt_values() {
+        assert!(validate_non_empty_trimmed("project", "Sync name").is_ok());
     }
 }
