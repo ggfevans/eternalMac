@@ -368,6 +368,49 @@ fn server_setup_launchctl_failure_does_not_persist_completed_healthy_state() {
 }
 
 #[test]
+fn server_setup_errors_when_config_snapshot_read_fails_with_non_not_found() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    fs::create_dir_all(paths.config_file.parent().unwrap()).unwrap();
+    fs::create_dir_all(&paths.config_file).unwrap();
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::default();
+
+    let err = apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap_err();
+    let err_text = err.to_string();
+    assert!(err_text.contains("snapshot"));
+    assert!(err_text.contains("config"));
+
+    assert!(paths.config_file.is_dir());
+    assert!(!paths.state_file.exists());
+
+    let calls = runner.calls.borrow();
+    assert!(!calls.iter().any(|(program, _)| program == "tmux"));
+    assert!(!calls.iter().any(|(program, _)| program == "launchctl"));
+}
+
+#[test]
+fn server_setup_rolls_back_config_when_state_write_fails() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    fs::create_dir_all(paths.state_dir.parent().unwrap()).unwrap();
+    fs::write(&paths.state_dir, "not-a-directory").unwrap();
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::default();
+
+    let err = apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap_err();
+    let err_text = err.to_string();
+    assert!(err_text.contains("state"));
+
+    assert!(!paths.config_file.exists());
+    assert!(!paths.state_file.exists());
+
+    let calls = runner.calls.borrow();
+    assert!(!calls.iter().any(|(program, _)| program == "tmux"));
+    assert!(!calls.iter().any(|(program, _)| program == "launchctl"));
+}
+
+#[test]
 fn client_setup_returns_error_and_keeps_persisted_state_when_launchctl_reports_failure() {
     let tempdir = tempfile::tempdir().unwrap();
     let paths = Paths::new(tempdir.path().to_path_buf());
