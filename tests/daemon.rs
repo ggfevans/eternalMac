@@ -346,3 +346,124 @@ fn server_run_once_reconciles_missing_default_session() {
         .iter()
         .any(|(program, args)| { program == "tmux" && args == &new_session_args("default") }));
 }
+
+#[test]
+fn server_run_once_treats_tmux_no_server_as_empty_and_reconciles() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::default()
+        .with_response(
+            "tailscale",
+            status_args(),
+            Output {
+                stdout:
+                    r#"{"BackendState":"Running","Self":{"DNSName":"mac-mini.example.ts.net"}}"#
+                        .into(),
+                stderr: String::new(),
+                success: true,
+            },
+        )
+        .with_response(
+            "tmux",
+            list_sessions_args(),
+            Output {
+                stdout: String::new(),
+                stderr: "no server running on /tmp/tmux-501/default".into(),
+                success: false,
+            },
+        )
+        .with_response(
+            "tmux",
+            new_session_args("default"),
+            Output {
+                stdout: String::new(),
+                stderr: String::new(),
+                success: true,
+            },
+        );
+
+    store
+        .save_config(&Config {
+            role: Role::Server,
+            server: Some(ServerConfig {
+                host_label: "mac-mini".into(),
+                default_session: "default".into(),
+                boot_sessions: vec!["default".into()],
+                tailscale_dns: Some("mac-mini.example.ts.net".into()),
+            }),
+            client: None,
+            session: SessionConfig { auto_attach: true },
+        })
+        .unwrap();
+
+    eternalmac::daemon::server::run_once(&paths, &store, &runner).unwrap();
+
+    let state = store.load_state().unwrap();
+    assert!(state.healthy);
+    assert!(state.default_session_present);
+    assert_eq!(state.known_sessions, vec!["default"]);
+    assert!(state
+        .summary
+        .contains("reconciled missing default session 'default'"));
+
+    let calls = runner.calls.borrow();
+    assert!(calls
+        .iter()
+        .any(|(program, args)| { program == "tmux" && args == &new_session_args("default") }));
+}
+
+#[test]
+fn client_run_once_marks_transient_sync_status_as_degraded() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::default()
+        .with_response(
+            "tailscale",
+            status_args(),
+            Output {
+                stdout:
+                    r#"{"BackendState":"Running","Self":{"DNSName":"mac-mini.example.ts.net"}}"#
+                        .into(),
+                stderr: String::new(),
+                success: true,
+            },
+        )
+        .with_response(
+            "mutagen",
+            list_args(),
+            Output {
+                stdout: "Name: project\nStatus: reconnecting\n".into(),
+                stderr: String::new(),
+                success: true,
+            },
+        );
+
+    store
+        .save_config(&Config {
+            role: Role::Client,
+            server: None,
+            client: Some(ClientConfig {
+                paired_server: "mac-mini.example.ts.net".into(),
+                pinned: vec![],
+                sync_pairs: vec![SyncPairConfig {
+                    name: "project".into(),
+                    local: "/Users/me/project".into(),
+                    remote: "mac-mini.example.ts.net:~/project".into(),
+                    mode: "two-way-resolved".into(),
+                }],
+            }),
+            session: SessionConfig { auto_attach: true },
+        })
+        .unwrap();
+
+    eternalmac::daemon::client::run_once(&paths, &store, &runner).unwrap();
+
+    let state = store.load_state().unwrap();
+    assert!(!state.healthy);
+    assert_eq!(state.syncs.len(), 1);
+    assert_eq!(state.syncs[0].name, "project");
+    assert_eq!(state.syncs[0].status, "degraded");
+    assert_eq!(state.summary, "client daemon degraded");
+}

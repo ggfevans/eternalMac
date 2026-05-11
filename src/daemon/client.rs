@@ -103,13 +103,29 @@ fn status_is_active(status: &str) -> bool {
         return false;
     }
 
+    let has_explicit_healthy_marker = ["watching for changes", "idle", "synchronized"]
+        .iter()
+        .any(|marker| normalized.contains(marker));
+    if !has_explicit_healthy_marker {
+        return false;
+    }
+
     ![
         "paused",
         "halted",
         "problem",
+        "problems",
         "error",
         "stopped",
         "disconnected",
+        "reconnect",
+        "reconnecting",
+        "scanning",
+        "staging",
+        "synchronizing",
+        "applying",
+        "waiting",
+        "conflict",
     ]
     .iter()
     .any(|marker| normalized.contains(marker))
