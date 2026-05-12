@@ -52,7 +52,11 @@ fn subcommand_help_is_descriptive() {
         .args(["sync", "add", "--help"])
         .assert()
         .success()
-        .stdout(contains("Add a sync pair"));
+        .stdout(
+            contains("Add a sync pair")
+                .and(contains("--local <LOCAL>"))
+                .and(contains("--remote <REMOTE>")),
+        );
 
     Command::cargo_bin("eternalMac")
         .unwrap()
@@ -90,44 +94,6 @@ fn setup_client_help_keeps_server_override_optional() {
                 "--server <SERVER>  Override the server DNS name to pair with",
             )),
         );
-}
-
-#[test]
-fn attach_routes_to_existing_output() {
-    Command::cargo_bin("eternalMac")
-        .unwrap()
-        .args(["attach"])
-        .assert()
-        .success()
-        .stdout(contains("mac-mini").and(contains("tmux attach -t 'default'")));
-}
-
-#[test]
-fn session_new_routes_correctly() {
-    Command::cargo_bin("eternalMac")
-        .unwrap()
-        .args(["session", "new", "demo"])
-        .assert()
-        .success()
-        .stdout(contains("created demo"));
-}
-
-#[test]
-fn sync_add_routes_and_respects_long_flags() {
-    Command::cargo_bin("eternalMac")
-        .unwrap()
-        .args([
-            "sync",
-            "add",
-            "project",
-            "--local",
-            "~/src/project",
-            "--remote",
-            "~/remote/project",
-        ])
-        .assert()
-        .success()
-        .stdout(contains("sync project ~/src/project ~/remote/project"));
 }
 
 #[test]

@@ -87,10 +87,7 @@ pub fn run() -> Result<()> {
         Some(Command::Setup {
             target: SetupCommand::Client { server },
         }) => setup::run_client(server),
-        Some(Command::Attach { session }) => {
-            attach::run(session.as_deref());
-            Ok(())
-        }
+        Some(Command::Attach { session }) => attach::run(session.as_deref()),
         Some(Command::Status) => {
             status::run();
             Ok(())
@@ -101,28 +98,16 @@ pub fn run() -> Result<()> {
         }
         Some(Command::Session {
             action: SessionAction::List,
-        }) => {
-            session::list();
-            Ok(())
-        }
+        }) => session::list(),
         Some(Command::Session {
             action: SessionAction::New { name },
-        }) => {
-            session::create(&name);
-            Ok(())
-        }
+        }) => session::create(&name),
         Some(Command::Session {
             action: SessionAction::Pin { name },
-        }) => {
-            session::pin_session(&name);
-            Ok(())
-        }
+        }) => session::pin_session(&name),
         Some(Command::Session {
             action: SessionAction::Unpin { name },
-        }) => {
-            session::unpin_session(&name);
-            Ok(())
-        }
+        }) => session::unpin_session(&name),
         Some(Command::Sync {
             action:
                 SyncAction::Add {
@@ -130,22 +115,13 @@ pub fn run() -> Result<()> {
                     local,
                     remote,
                 },
-        }) => {
-            sync::add(&name, &local, &remote);
-            Ok(())
-        }
+        }) => sync::add(&name, &local, &remote),
         Some(Command::Sync {
             action: SyncAction::List,
-        }) => {
-            sync::list();
-            Ok(())
-        }
+        }) => sync::list(),
         Some(Command::Sync {
             action: SyncAction::Status,
-        }) => {
-            sync::status();
-            Ok(())
-        }
+        }) => sync::status(),
         Some(Command::Daemon {
             target: DaemonAction::Server,
         }) => daemon::run_server(),

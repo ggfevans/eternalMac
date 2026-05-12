@@ -1,7 +1,50 @@
-pub fn run(session: Option<&str>) {
-    let session = session.unwrap_or("default");
-    println!(
-        "{:?}",
-        crate::tooling::et::build_attach_args("mac-mini", session)
-    );
+use anyhow::{anyhow, Context, Result};
+
+use crate::app::context::AppContext;
+use crate::config::store::Store;
+use crate::process::runner::{Output, Runner};
+use crate::tooling::et::build_attach_args;
+
+const DEFAULT_SESSION: &str = "default";
+
+pub fn resolve_session_name(session: Option<&str>) -> String {
+    let selected = session.map(str::trim).unwrap_or(DEFAULT_SESSION);
+    if selected.is_empty() {
+        return DEFAULT_SESSION.into();
+    }
+
+    selected.into()
+}
+
+fn run_checked<R: Runner>(runner: &R, program: &str, args: &[String]) -> Result<Output> {
+    let output = runner.run(program, args)?;
+    if output.success {
+        return Ok(output);
+    }
+
+    let mut message = format!("command failed: {program} {}", args.join(" "));
+    if !output.stderr.trim().is_empty() {
+        message.push_str(&format!("; stderr: {}", output.stderr.trim()));
+    }
+
+    Err(anyhow!(message))
+}
+
+pub fn run_with<R: Runner>(store: &Store, runner: &R, session: Option<&str>) -> Result<()> {
+    let config = store
+        .load_config()
+        .context("loading client config for attach")?;
+    let client = config.client.as_ref().context(
+        "attach requires client config; run `eternalMac setup client` on this machine first",
+    )?;
+
+    let session = resolve_session_name(session);
+    let args = build_attach_args(&client.paired_server, &session);
+    run_checked(runner, "et", &args)?;
+    Ok(())
+}
+
+pub fn run(session: Option<&str>) -> Result<()> {
+    let context = AppContext::from_env()?;
+    run_with(&context.store, &context.runner, session)
 }

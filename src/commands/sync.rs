@@ -1,23 +1,95 @@
-pub fn add_output(name: &str, local: &str, remote: &str) -> String {
-    format!("sync {name} {local} {remote}")
+use anyhow::{anyhow, Context, Result};
+
+use crate::app::context::AppContext;
+use crate::config::store::Store;
+use crate::model::config::SyncPairConfig;
+use crate::process::runner::{Output, Runner};
+use crate::sync::service::build_pair;
+use crate::tooling::mutagen::{build_create_args, list_args};
+
+fn run_checked<R: Runner>(runner: &R, program: &str, args: &[String]) -> Result<Output> {
+    let output = runner.run(program, args)?;
+    if output.success {
+        return Ok(output);
+    }
+
+    let mut message = format!("command failed: {program} {}", args.join(" "));
+    if !output.stderr.trim().is_empty() {
+        message.push_str(&format!("; stderr: {}", output.stderr.trim()));
+    }
+
+    Err(anyhow!(message))
 }
 
-pub fn add(name: &str, local: &str, remote: &str) {
-    println!("{}", add_output(name, local, remote));
+pub fn add_with<R: Runner>(
+    store: &Store,
+    runner: &R,
+    name: &str,
+    local: &str,
+    remote: &str,
+) -> Result<SyncPairConfig> {
+    let pair = build_pair(name, local, remote, None);
+
+    run_checked(
+        runner,
+        "mutagen",
+        &build_create_args(&pair.name, &pair.local, &pair.remote),
+    )?;
+
+    let mut config = store
+        .load_config()
+        .context("loading client config for sync add")?;
+    let client = config.client.as_mut().context(
+        "sync add requires client config; run `eternalMac setup client` on this machine first",
+    )?;
+
+    let sync_pair = SyncPairConfig {
+        name: pair.name,
+        local: pair.local,
+        remote: pair.remote,
+        mode: pair.mode,
+    };
+    if let Some(existing) = client
+        .sync_pairs
+        .iter_mut()
+        .find(|existing| existing.name == sync_pair.name)
+    {
+        *existing = sync_pair.clone();
+    } else {
+        client.sync_pairs.push(sync_pair.clone());
+    }
+
+    store
+        .save_config(&config)
+        .context("saving client config after sync add")?;
+
+    Ok(sync_pair)
 }
 
-pub fn list_output() -> &'static str {
-    "project"
+pub fn list_with<R: Runner>(runner: &R) -> Result<String> {
+    let output = run_checked(runner, "mutagen", &list_args())?;
+    Ok(output.stdout)
 }
 
-pub fn list() {
-    println!("{}", list_output());
+pub fn status_with<R: Runner>(runner: &R) -> Result<String> {
+    let output = run_checked(runner, "mutagen", &list_args())?;
+    Ok(output.stdout)
 }
 
-pub fn status_output() -> &'static str {
-    "sync healthy"
+pub fn add(name: &str, local: &str, remote: &str) -> Result<()> {
+    let context = AppContext::from_env()?;
+    add_with(&context.store, &context.runner, name, local, remote)?;
+    Ok(())
 }
 
-pub fn status() {
-    println!("{}", status_output());
+pub fn list() -> Result<()> {
+    let context = AppContext::from_env()?;
+    print!("{}", list_with(&context.runner)?);
+    Ok(())
+}
+
+pub fn status() -> Result<()> {
+    let context = AppContext::from_env()?;
+    print!("{}", status_with(&context.runner)?);
+    Ok(())
 }

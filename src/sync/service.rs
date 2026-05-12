@@ -8,11 +8,24 @@ pub struct Pair {
     pub mode: String,
 }
 
-pub fn build_pair(name: &str, local: &str, remote: &str) -> Pair {
+pub fn normalize_mode(mode: Option<&str>) -> String {
+    let Some(raw_mode) = mode else {
+        return SYNC_MODE_TWO_WAY_RESOLVED.into();
+    };
+
+    let normalized = raw_mode.trim().to_ascii_lowercase().replace('_', "-");
+    if normalized == SYNC_MODE_TWO_WAY_RESOLVED {
+        return normalized;
+    }
+
+    SYNC_MODE_TWO_WAY_RESOLVED.into()
+}
+
+pub fn build_pair(name: &str, local: &str, remote: &str, mode: Option<&str>) -> Pair {
     Pair {
         name: name.into(),
         local: local.into(),
         remote: remote.into(),
-        mode: SYNC_MODE_TWO_WAY_RESOLVED.into(),
+        mode: normalize_mode(mode),
     }
 }
