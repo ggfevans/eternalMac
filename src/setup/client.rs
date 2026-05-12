@@ -10,7 +10,10 @@ use crate::model::state::{State, SyncPairState};
 use crate::platform::launchd::{write_plist, Definition};
 use crate::process::runner::{Output, Runner};
 use crate::tooling::brew::{install_cask_args, install_formula_args};
-use crate::tooling::mutagen::{build_create_args, SYNC_MODE_TWO_WAY_RESOLVED};
+use crate::tooling::mutagen::{
+    build_create_args, list_args as mutagen_list_args, parse_list_output, ListedSession,
+    SYNC_MODE_TWO_WAY_RESOLVED,
+};
 use crate::tooling::tailscale::{parse_status_json, status_args};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,6 +125,40 @@ fn persist_config_and_state(
     Ok(())
 }
 
+fn has_matching_existing_sync(existing_syncs: &[ListedSession], root: &SyncRootInput) -> Result<bool> {
+    let matching_name = existing_syncs
+        .iter()
+        .filter(|session| session.name == root.name)
+        .collect::<Vec<_>>();
+
+    if matching_name.is_empty() {
+        return Ok(false);
+    }
+
+    if matching_name.len() > 1 {
+        return Err(anyhow!(
+            "multiple mutagen syncs already use the name `{}`; remove the duplicates before rerunning `eternalMac setup client`",
+            root.name
+        ));
+    }
+
+    let existing = matching_name[0];
+    if existing.alpha_url.as_deref() == Some(root.local.as_str())
+        && existing.beta_url.as_deref() == Some(root.remote.as_str())
+    {
+        return Ok(true);
+    }
+
+    Err(anyhow!(
+        "existing mutagen sync `{}` does not match requested endpoints; expected {} <-> {}, found {} <-> {}",
+        root.name,
+        root.local,
+        root.remote,
+        existing.alpha_url.as_deref().unwrap_or("unknown"),
+        existing.beta_url.as_deref().unwrap_or("unknown")
+    ))
+}
+
 pub fn apply_client_setup<R: Runner>(
     paths: &Paths,
     store: &Store,
@@ -191,10 +228,15 @@ pub fn apply_client_setup<R: Runner>(
         },
     )?;
 
+    let existing_syncs_output = run_checked(runner, "mutagen", &mutagen_list_args())?;
+    let existing_syncs = parse_list_output(&existing_syncs_output.stdout);
+
     let mut created_sync_count = 0usize;
     for (index, root) in input.sync_roots.iter().enumerate() {
-        let args = build_create_args(&root.name, &root.local, &root.remote);
-        run_checked(runner, "mutagen", &args)?;
+        if !has_matching_existing_sync(&existing_syncs, root)? {
+            let args = build_create_args(&root.name, &root.local, &root.remote);
+            run_checked(runner, "mutagen", &args)?;
+        }
         sync_states[index].status = "created".into();
         created_sync_count += 1;
         store.save_state(&State {

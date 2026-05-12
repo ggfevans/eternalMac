@@ -11,7 +11,7 @@ use crate::platform::launchd::{write_plist, Definition};
 use crate::process::runner::{Output, Runner};
 use crate::tooling::brew::{install_cask_args, install_formula_args};
 use crate::tooling::tailscale::{parse_status_json, status_args, Status as TailscaleStatus};
-use crate::tooling::tmux::new_session_args;
+use crate::tooling::tmux::{list_sessions_args, new_session_args, parse_sessions};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerSetupSummary {
@@ -124,6 +124,19 @@ fn resolve_server_dns(status: &TailscaleStatus) -> Result<String> {
     })
 }
 
+fn tmux_list_sessions_failed_without_server(stderr: &str) -> bool {
+    let normalized = stderr.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    normalized.contains("no server running on")
+        || normalized.contains("failed to connect to server")
+        || (normalized.contains("error connecting to")
+            && (normalized.contains("no such file or directory")
+                || normalized.contains("connection refused")))
+}
+
 pub fn apply_server_setup<R: Runner>(
     paths: &Paths,
     store: &Store,
@@ -176,8 +189,25 @@ pub fn apply_server_setup<R: Runner>(
         },
     )?;
 
-    let tmux_args = new_session_args(&default_session);
-    run_checked(runner, "tmux", &tmux_args)?;
+    let tmux_list_args = list_sessions_args();
+    let tmux_list_output = runner.run("tmux", &tmux_list_args)?;
+    let mut known_sessions = if tmux_list_output.success {
+        parse_sessions(&tmux_list_output.stdout)
+    } else if tmux_list_sessions_failed_without_server(&tmux_list_output.stderr) {
+        vec![]
+    } else {
+        let mut message = format!("command failed: tmux {}", tmux_list_args.join(" "));
+        if !tmux_list_output.stderr.trim().is_empty() {
+            message.push_str(&format!("; stderr: {}", tmux_list_output.stderr.trim()));
+        }
+        return Err(anyhow!(message));
+    };
+
+    if !known_sessions.iter().any(|session| session == &default_session) {
+        let tmux_args = new_session_args(&default_session);
+        run_checked(runner, "tmux", &tmux_args)?;
+        known_sessions.push(default_session.clone());
+    }
 
     write_plist(
         &paths.server_plist,
@@ -214,7 +244,7 @@ pub fn apply_server_setup<R: Runner>(
         daemon_healthy: false,
         daemon_heartbeat_unix: 0,
         default_session_present: true,
-        known_sessions: vec![default_session.clone()],
+        known_sessions,
         syncs: vec![],
     })?;
 

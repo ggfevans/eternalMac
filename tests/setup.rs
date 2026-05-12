@@ -222,6 +222,45 @@ fn server_setup_errors_when_tailscale_dns_is_unavailable() {
 }
 
 #[test]
+fn server_setup_skips_bootstrap_when_default_session_already_exists() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::with_stubs(vec![Stub {
+        program: "tmux".to_string(),
+        args: vec!["list-sessions".to_string(), "-F".to_string(), "#S".to_string()],
+        output: Output {
+            stdout: "default\npairing\n".to_string(),
+            stderr: String::new(),
+            success: true,
+        },
+    }]);
+
+    apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap();
+
+    let calls = runner.calls.borrow();
+    assert!(calls.iter().any(|(program, args)| {
+        program == "tmux"
+            && args
+                == &vec![
+                    "list-sessions".to_string(),
+                    "-F".to_string(),
+                    "#S".to_string(),
+                ]
+    }));
+    assert!(!calls.iter().any(|(program, args)| {
+        program == "tmux"
+            && args
+                == &vec![
+                    "new-session".to_string(),
+                    "-d".to_string(),
+                    "-s".to_string(),
+                    "default".to_string(),
+                ]
+    }));
+}
+
+#[test]
 fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
     let tempdir = tempfile::tempdir().unwrap();
     let paths = Paths::new(tempdir.path().to_path_buf());
@@ -359,6 +398,62 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
     let launchctl_index = call_index(&calls, "launchctl", &launchctl_args).unwrap();
     assert!(unload_index < launchctl_index);
     assert!(mutagen_index < launchctl_index);
+}
+
+#[test]
+fn client_setup_skips_mutagen_create_when_matching_sync_already_exists() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::with_stubs(vec![Stub {
+        program: "mutagen".to_string(),
+        args: vec!["sync".to_string(), "list".to_string()],
+        output: Output {
+            stdout: "Name: project\nIdentifier: sync_123\nLabels: None\nAlpha:\n    URL: /Users/me/project\n    Connection state: Connected\nBeta:\n    URL: mac-mini.example.ts.net:~/project\n    Connection state: Connected\nStatus: Watching for changes\n".to_string(),
+            stderr: String::new(),
+            success: true,
+        },
+    }]);
+
+    let summary = apply_client_setup(
+        &paths,
+        &store,
+        &runner,
+        ClientSetupInput {
+            paired_server: "mac-mini.example.ts.net".into(),
+            sync_roots: vec![SyncRootInput {
+                name: "project".into(),
+                local: "/Users/me/project".into(),
+                remote: "mac-mini.example.ts.net:~/project".into(),
+            }],
+        },
+    )
+    .unwrap();
+
+    assert_eq!(summary.sync_names, vec!["project"]);
+
+    let calls = runner.calls.borrow();
+    assert!(calls.iter().any(|(program, args)| {
+        program == "mutagen" && args == &vec!["sync".to_string(), "list".to_string()]
+    }));
+    assert!(!calls.iter().any(|(program, args)| {
+        program == "mutagen"
+            && args
+                == &vec![
+                    "sync".to_string(),
+                    "create".to_string(),
+                    "--name".to_string(),
+                    "project".to_string(),
+                    "--sync-mode".to_string(),
+                    "two-way-resolved".to_string(),
+                    "/Users/me/project".to_string(),
+                    "mac-mini.example.ts.net:~/project".to_string(),
+                ]
+    }));
+
+    let state = store.load_state().unwrap();
+    assert_eq!(state.syncs.len(), 1);
+    assert_eq!(state.syncs[0].status, "created");
 }
 
 #[test]
