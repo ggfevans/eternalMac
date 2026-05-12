@@ -14,7 +14,9 @@ fn doctor_reports_missing_config_on_unconfigured_machine() {
         .args(["doctor"])
         .assert()
         .success()
-        .stdout(contains("config missing: run `eternalMac setup server` or `eternalMac setup client`"));
+        .stdout(contains(
+            "config missing: run `eternalMac setup server` or `eternalMac setup client`",
+        ));
 }
 
 #[test]
@@ -42,5 +44,7 @@ fn doctor_reports_missing_state_when_config_exists() {
         .args(["doctor"])
         .assert()
         .success()
-        .stdout(contains("state missing: re-run `eternalMac setup server` to restore local state"));
+        .stdout(contains(
+            "state missing: re-run `eternalMac setup server` to restore local state",
+        ));
 }
