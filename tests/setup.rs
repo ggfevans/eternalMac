@@ -123,10 +123,18 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
             .to_string()
             .as_str()
     ));
+    assert!(server_plist.contains("<key>EnvironmentVariables</key>"));
+    assert!(server_plist.contains("<key>PATH</key>"));
+    assert!(server_plist.contains(
+        "<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>"
+    ));
     assert_eq!(summary.dns_name, "mac-mini.example.ts.net");
     assert_eq!(summary.default_session, "default");
 
     let calls = runner.calls.borrow();
+    assert!(calls.iter().any(|(program, args)| {
+        program == "brew" && args == &vec!["tap".to_string(), "mutagen-io/mutagen".to_string()]
+    }));
     assert!(calls.iter().any(|(program, args)| {
         program == "brew"
             && args
@@ -134,7 +142,7 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
                     "install".to_string(),
                     "et".to_string(),
                     "tmux".to_string(),
-                    "mutagen".to_string(),
+                    "mutagen-io/mutagen/mutagen".to_string(),
                 ]
     }));
     assert!(calls.iter().any(|(program, args)| {
@@ -184,6 +192,13 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
         "-s".to_string(),
         "default".to_string(),
     ];
+    let brew_tap_args = vec!["tap".to_string(), "mutagen-io/mutagen".to_string()];
+    let brew_install_args = vec![
+        "install".to_string(),
+        "et".to_string(),
+        "tmux".to_string(),
+        "mutagen-io/mutagen/mutagen".to_string(),
+    ];
     let unload_client_args = vec![
         "unload".to_string(),
         "-w".to_string(),
@@ -194,9 +209,12 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
         "-w".to_string(),
         paths.server_plist.display().to_string(),
     ];
+    let brew_tap_index = call_index(&calls, "brew", &brew_tap_args).unwrap();
+    let brew_install_index = call_index(&calls, "brew", &brew_install_args).unwrap();
     let tmux_index = call_index(&calls, "tmux", &tmux_args).unwrap();
     let unload_index = call_index(&calls, "launchctl", &unload_client_args).unwrap();
     let launchctl_index = call_index(&calls, "launchctl", &launchctl_args).unwrap();
+    assert!(brew_tap_index < brew_install_index);
     assert!(unload_index < launchctl_index);
     assert!(tmux_index < launchctl_index);
 }
@@ -334,10 +352,18 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
             .to_string()
             .as_str()
     ));
+    assert!(client_plist.contains("<key>EnvironmentVariables</key>"));
+    assert!(client_plist.contains("<key>PATH</key>"));
+    assert!(client_plist.contains(
+        "<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>"
+    ));
     assert_eq!(summary.paired_server, "mac-mini.example.ts.net");
     assert_eq!(summary.sync_names, vec!["project"]);
 
     let calls = runner.calls.borrow();
+    assert!(calls.iter().any(|(program, args)| {
+        program == "brew" && args == &vec!["tap".to_string(), "mutagen-io/mutagen".to_string()]
+    }));
     assert!(calls.iter().any(|(program, args)| {
         program == "brew"
             && args
@@ -345,7 +371,7 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
                     "install".to_string(),
                     "et".to_string(),
                     "tmux".to_string(),
-                    "mutagen".to_string(),
+                    "mutagen-io/mutagen/mutagen".to_string(),
                 ]
     }));
     assert!(calls.iter().any(|(program, args)| {
@@ -403,6 +429,13 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
         "/Users/me/project".to_string(),
         "mac-mini.example.ts.net:~/project".to_string(),
     ];
+    let brew_tap_args = vec!["tap".to_string(), "mutagen-io/mutagen".to_string()];
+    let brew_install_args = vec![
+        "install".to_string(),
+        "et".to_string(),
+        "tmux".to_string(),
+        "mutagen-io/mutagen/mutagen".to_string(),
+    ];
     let unload_server_args = vec![
         "unload".to_string(),
         "-w".to_string(),
@@ -413,9 +446,12 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
         "-w".to_string(),
         paths.client_plist.display().to_string(),
     ];
+    let brew_tap_index = call_index(&calls, "brew", &brew_tap_args).unwrap();
+    let brew_install_index = call_index(&calls, "brew", &brew_install_args).unwrap();
     let mutagen_index = call_index(&calls, "mutagen", &mutagen_args).unwrap();
     let unload_index = call_index(&calls, "launchctl", &unload_server_args).unwrap();
     let launchctl_index = call_index(&calls, "launchctl", &launchctl_args).unwrap();
+    assert!(brew_tap_index < brew_install_index);
     assert!(unload_index < launchctl_index);
     assert!(mutagen_index < launchctl_index);
 }

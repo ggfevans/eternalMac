@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use eternalmac::platform::launchd::{render, Definition};
 
 #[test]
@@ -9,6 +11,7 @@ fn plist_render_includes_label_and_program() {
             "daemon".into(),
             "server".into(),
         ],
+        environment_variables: BTreeMap::new(),
         run_at_load: true,
         keep_alive: true,
     });
@@ -22,6 +25,7 @@ fn plist_render_escapes_xml_in_label_and_program_arguments() {
     let xml = render(&Definition {
         label: "com.eternalmac.server&<>'\"".into(),
         program_arguments: vec!["arg&one".into(), "arg<two>".into(), "arg'three'\"".into()],
+        environment_variables: BTreeMap::new(),
         run_at_load: true,
         keep_alive: false,
     });
@@ -36,4 +40,24 @@ fn plist_render_escapes_xml_in_label_and_program_arguments() {
     assert!(!xml.contains("com.eternalmac.server&<>'\""));
     assert!(!xml.contains("<string>arg&one</string>"));
     assert!(!xml.contains("<string>arg<two></string>"));
+}
+
+#[test]
+fn plist_render_includes_environment_variables() {
+    let xml = render(&Definition {
+        label: "com.eternalmac.server".into(),
+        program_arguments: vec!["/opt/homebrew/bin/eternalMac".into()],
+        environment_variables: BTreeMap::from([(
+            String::from("PATH"),
+            String::from("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"),
+        )]),
+        run_at_load: true,
+        keep_alive: true,
+    });
+
+    assert!(xml.contains("<key>EnvironmentVariables</key>"));
+    assert!(xml.contains("<key>PATH</key>"));
+    assert!(xml.contains(
+        "<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>"
+    ));
 }

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -7,6 +8,7 @@ use anyhow::Result;
 pub struct Definition {
     pub label: String,
     pub program_arguments: Vec<String>,
+    pub environment_variables: BTreeMap<String, String>,
     pub run_at_load: bool,
     pub keep_alive: bool,
 }
@@ -28,6 +30,23 @@ pub fn render(definition: &Definition) -> String {
         .map(|arg| format!("<string>{}</string>", escape_xml(arg)))
         .collect::<Vec<_>>()
         .join("");
+    let environment_variables = if definition.environment_variables.is_empty() {
+        String::new()
+    } else {
+        let entries = definition
+            .environment_variables
+            .iter()
+            .map(|(key, value)| {
+                format!(
+                    "<key>{}</key><string>{}</string>",
+                    escape_xml(key),
+                    escape_xml(value)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        format!("<key>EnvironmentVariables</key><dict>{entries}</dict>")
+    };
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -35,11 +54,13 @@ pub fn render(definition: &Definition) -> String {
 <plist version="1.0"><dict>
 <key>Label</key><string>{}</string>
 <key>ProgramArguments</key><array>{}</array>
+{}
 <key>RunAtLoad</key><{}/>
 <key>KeepAlive</key><{}/>
 </dict></plist>"#,
         label,
         args,
+        environment_variables,
         if definition.run_at_load {
             "true"
         } else {

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
 
@@ -9,12 +10,15 @@ use crate::model::config::{ClientConfig, Config, Role, SessionConfig, SyncPairCo
 use crate::model::state::{State, SyncPairState};
 use crate::platform::launchd::{write_plist, Definition};
 use crate::process::runner::{Output, Runner};
-use crate::tooling::brew::{install_cask_args, install_formula_args};
+use crate::tooling::brew::{install_cask_args, install_formula_args, tap_args};
+use crate::tooling::dependencies::{required_formulae, MUTAGEN_TAP, TAILSCALE_CASK};
 use crate::tooling::mutagen::{
     build_create_args, list_args as mutagen_list_args, parse_list_output, ListedSession,
     SYNC_MODE_TWO_WAY_RESOLVED,
 };
 use crate::tooling::tailscale::{parse_status_json, status_args};
+
+const DAEMON_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyncRootInput {
@@ -33,6 +37,11 @@ pub struct ClientSetupInput {
 pub struct ClientSetupSummary {
     pub paired_server: String,
     pub sync_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClientPreflight {
+    tailscale_ok: bool,
 }
 
 fn run_checked<R: Runner>(runner: &R, program: &str, args: &[String]) -> Result<Output> {
@@ -169,24 +178,35 @@ fn current_executable_path() -> Result<String> {
         .to_string())
 }
 
-pub fn apply_client_setup<R: Runner>(
-    paths: &Paths,
-    store: &Store,
-    runner: &R,
-    input: ClientSetupInput,
-) -> Result<ClientSetupSummary> {
-    let formulae = vec!["et".into(), "tmux".into(), "mutagen".into()];
+pub(crate) fn preflight_client_setup<R: Runner>(runner: &R) -> Result<ClientPreflight> {
+    let tap_args = tap_args(MUTAGEN_TAP);
+    run_checked(runner, "brew", &tap_args)?;
+
+    let formulae = required_formulae();
     if let Some(args) = install_formula_args(&formulae) {
         run_checked(runner, "brew", &args)?;
     }
 
-    let cask_args = install_cask_args("tailscale-app");
+    let cask_args = install_cask_args(TAILSCALE_CASK);
     run_checked(runner, "brew", &cask_args)?;
 
     let tailscale_args = status_args();
     let tailscale_status = run_checked(runner, "tailscale", &tailscale_args)?;
     let parsed_status = parse_status_json(&tailscale_status.stdout)?;
-    let tailscale_ok = parsed_status.backend_state == "Running";
+
+    Ok(ClientPreflight {
+        tailscale_ok: parsed_status.backend_state == "Running",
+    })
+}
+
+pub(crate) fn apply_client_setup_with_preflight<R: Runner>(
+    paths: &Paths,
+    store: &Store,
+    runner: &R,
+    preflight: ClientPreflight,
+    input: ClientSetupInput,
+) -> Result<ClientSetupSummary> {
+    let tailscale_ok = preflight.tailscale_ok;
 
     let sync_pairs = input
         .sync_roots
@@ -269,12 +289,14 @@ pub fn apply_client_setup<R: Runner>(
         .map(|pair| pair.name.clone())
         .collect::<Vec<_>>();
     let executable_path = current_executable_path()?;
+    let environment_variables = BTreeMap::from([(String::from("PATH"), String::from(DAEMON_PATH))]);
 
     write_plist(
         &paths.client_plist,
         &Definition {
             label: "com.eternalmac.client".into(),
             program_arguments: vec![executable_path, "daemon".into(), "client".into()],
+            environment_variables,
             run_at_load: true,
             keep_alive: true,
         },
@@ -309,4 +331,14 @@ pub fn apply_client_setup<R: Runner>(
         paired_server: input.paired_server,
         sync_names,
     })
+}
+
+pub fn apply_client_setup<R: Runner>(
+    paths: &Paths,
+    store: &Store,
+    runner: &R,
+    input: ClientSetupInput,
+) -> Result<ClientSetupSummary> {
+    let preflight = preflight_client_setup(runner)?;
+    apply_client_setup_with_preflight(paths, store, runner, preflight, input)
 }

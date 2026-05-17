@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
 
@@ -9,9 +10,12 @@ use crate::model::config::{Config, Role, ServerConfig, SessionConfig};
 use crate::model::state::State;
 use crate::platform::launchd::{write_plist, Definition};
 use crate::process::runner::{Output, Runner};
-use crate::tooling::brew::{install_cask_args, install_formula_args};
+use crate::tooling::brew::{install_cask_args, install_formula_args, tap_args};
+use crate::tooling::dependencies::{required_formulae, MUTAGEN_TAP, TAILSCALE_CASK};
 use crate::tooling::tailscale::{parse_status_json, status_args, Status as TailscaleStatus};
 use crate::tooling::tmux::{list_sessions_args, new_session_args, parse_sessions};
+
+const DAEMON_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerSetupSummary {
@@ -150,12 +154,15 @@ pub fn apply_server_setup<R: Runner>(
     runner: &R,
     host_label: String,
 ) -> Result<ServerSetupSummary> {
-    let formulae = vec!["et".into(), "tmux".into(), "mutagen".into()];
+    let tap_args = tap_args(MUTAGEN_TAP);
+    run_checked(runner, "brew", &tap_args)?;
+
+    let formulae = required_formulae();
     if let Some(args) = install_formula_args(&formulae) {
         run_checked(runner, "brew", &args)?;
     }
 
-    let cask_args = install_cask_args("tailscale-app");
+    let cask_args = install_cask_args(TAILSCALE_CASK);
     run_checked(runner, "brew", &cask_args)?;
 
     let tailscale_args = status_args();
@@ -219,12 +226,14 @@ pub fn apply_server_setup<R: Runner>(
         known_sessions.push(default_session.clone());
     }
     let executable_path = current_executable_path()?;
+    let environment_variables = BTreeMap::from([(String::from("PATH"), String::from(DAEMON_PATH))]);
 
     write_plist(
         &paths.server_plist,
         &Definition {
             label: "com.eternalmac.server".into(),
             program_arguments: vec![executable_path, "daemon".into(), "server".into()],
+            environment_variables,
             run_at_load: true,
             keep_alive: true,
         },
