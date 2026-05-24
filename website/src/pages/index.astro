@@ -1,0 +1,113 @@
+---
+import '../styles/home.css';
+
+const installCommand = `brew install eternalmac
+eternalMac setup server
+eternalMac setup client --server dhruvils-mac-mini.ts.net
+eternalMac attach -n agent-night-shift`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>eternalMac</title>
+    <meta
+      name="description"
+      content="Turn a Mac mini into an always-on devserver for your laptop."
+    />
+  </head>
+  <body>
+    <header class="site-shell nav">
+      <a class="brand" href="/" aria-label="eternalMac home">
+        <img src="/logo.svg" alt="" />
+        <span>eternalMac</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/dhruvil009/eternalMac">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="site-shell hero">
+        <div>
+          <div class="eyebrow">Mac mini devserver for your laptop</div>
+          <h1>Stop using your MacBook like a server.</h1>
+          <p class="lede">
+            Run long-lived sessions, overnight agents, and synced projects on a Mac mini.
+            Attach from your laptop, close it, leave, and reconnect later from anywhere Tailscale reaches.
+          </p>
+          <div class="cta-row">
+            <a class="button primary" href="/docs/getting-started/installation/">Read the quickstart</a>
+            <a class="button" href="https://github.com/dhruvil009/eternalMac">View on GitHub</a>
+          </div>
+        </div>
+
+        <div class="terminal" aria-label="eternalMac setup commands">
+          <div class="terminal-header" aria-hidden="true">
+            <span class="terminal-dot"></span>
+            <span class="terminal-dot"></span>
+            <span class="terminal-dot"></span>
+          </div>
+          <pre><code>{installCommand}</code></pre>
+        </div>
+      </section>
+
+      <section class="site-shell section">
+        <h2 class="section-title">For the vibe-coding laptop problem.</h2>
+        <div class="meme-strip">
+          <div class="macbook-sketch" aria-label="Open laptop sketch"></div>
+          <div class="meme-copy">
+            <p>
+              Your laptop is great at being a laptop. It is less great as the build machine,
+              agent host, sync hub, and overnight terminal you are afraid to close.
+              eternalMac moves that work to the Mac mini already sitting on your network.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="site-shell section">
+        <h2 class="section-title">What it wires together.</h2>
+        <div class="cards">
+          <article class="feature">
+            <strong>Named sessions</strong>
+            <p>
+              Create <code>agent-night-shift</code>, detach locally, and reconnect after shutting down your laptop.
+            </p>
+          </article>
+          <article class="feature">
+            <strong>Resilient shell</strong>
+            <p>Eternal Terminal handles reconnects while tmux keeps the remote workspace alive.</p>
+          </article>
+          <article class="feature">
+            <strong>Synced files</strong>
+            <p>Mutagen keeps local edits and Mac mini project folders moving both ways.</p>
+          </article>
+          <article class="feature">
+            <strong>Private reachability</strong>
+            <p>Tailscale gives the Mac mini a private address you can use from anywhere.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="site-shell section">
+        <h2 class="section-title">A small tool around proven pieces.</h2>
+        <div class="flow" aria-label="eternalMac architecture">
+          <div class="flow-item">MacBook Air</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-item">Tailscale + ET + Mutagen</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-item">Mac mini</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-shell footer">
+      <span>eternalMac</span>
+      <span>Docs at eternalmac.dev</span>
+    </footer>
+  </body>
+</html>

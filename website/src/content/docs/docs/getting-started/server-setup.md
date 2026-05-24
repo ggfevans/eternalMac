@@ -1,0 +1,21 @@
+---
+title: Server Setup
+description: Configure the Mac mini as the eternalMac devserver.
+---
+
+Run this on the Mac mini:
+
+```bash
+cargo run -- setup server
+```
+
+Server setup verifies Tailscale, checks Remote Login availability, creates the default tmux session, and installs a launchd agent for the server daemon.
+
+At the end, copy the printed Tailscale DNS name. You will use it on the laptop.
+
+```bash
+Server DNS: dhruvils-mac-mini.example.ts.net
+```
+
+Remote Login must be enabled in macOS because Eternal Terminal and Mutagen both rely on SSH during setup and handshaking.
+
