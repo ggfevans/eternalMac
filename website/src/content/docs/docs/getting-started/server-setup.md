@@ -9,7 +9,7 @@ Run this on the Mac mini:
 eternalMac setup server
 ```
 
-Server setup verifies Tailscale, checks Remote Login availability, creates the default tmux session, and installs a launchd agent for the server daemon.
+Server setup verifies Tailscale, checks Remote Login availability, starts the Homebrew-managed Eternal Terminal service, creates the default tmux session, and installs a launchd agent for the server daemon.
 
 At the end, copy the printed Tailscale DNS name. You will use it on the laptop.
 

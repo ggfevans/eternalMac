@@ -23,6 +23,22 @@ Rerun client setup. It discovers and stores the remote `etterminal` path used by
 eternalMac setup client --server <mac-mini-tailscale-dns>
 ```
 
+## ET server is unreachable
+
+Run this on the Mac mini:
+
+```bash
+brew services list | grep et
+brew services start et
+nc -G 5 -z localhost 2022
+```
+
+Then rerun server setup if the service was stopped:
+
+```bash
+eternalMac setup server
+```
+
 ## Sync is degraded
 
 Run:
@@ -33,4 +49,3 @@ eternalMac doctor
 ```
 
 If duplicate Mutagen sessions exist, manual cleanup may be required until first-class sync removal lands.
-

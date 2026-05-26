@@ -161,6 +161,26 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
         program == "tailscale" && args == &vec!["status".to_string(), "--json".to_string()]
     }));
     assert!(calls.iter().any(|(program, args)| {
+        program == "brew"
+            && args
+                == &vec![
+                    "services".to_string(),
+                    "start".to_string(),
+                    "et".to_string(),
+                ]
+    }));
+    assert!(calls.iter().any(|(program, args)| {
+        program == "nc"
+            && args
+                == &vec![
+                    "-G".to_string(),
+                    "5".to_string(),
+                    "-z".to_string(),
+                    "localhost".to_string(),
+                    "2022".to_string(),
+                ]
+    }));
+    assert!(calls.iter().any(|(program, args)| {
         program == "tmux"
             && args
                 == &vec![
@@ -214,10 +234,27 @@ fn server_setup_writes_config_state_launch_agent_and_bootstrap_session() {
     ];
     let brew_tap_index = call_index(&calls, "brew", &brew_tap_args).unwrap();
     let brew_install_index = call_index(&calls, "brew", &brew_install_args).unwrap();
+    let brew_services_args = vec![
+        "services".to_string(),
+        "start".to_string(),
+        "et".to_string(),
+    ];
+    let et_port_args = vec![
+        "-G".to_string(),
+        "5".to_string(),
+        "-z".to_string(),
+        "localhost".to_string(),
+        "2022".to_string(),
+    ];
     let tmux_index = call_index(&calls, "tmux", &tmux_args).unwrap();
     let unload_index = call_index(&calls, "launchctl", &unload_client_args).unwrap();
     let launchctl_index = call_index(&calls, "launchctl", &launchctl_args).unwrap();
+    let brew_services_index = call_index(&calls, "brew", &brew_services_args).unwrap();
+    let et_port_index = call_index(&calls, "nc", &et_port_args).unwrap();
     assert!(brew_tap_index < brew_install_index);
+    assert!(brew_install_index < brew_services_index);
+    assert!(brew_services_index < et_port_index);
+    assert!(et_port_index < tmux_index);
     assert!(unload_index < launchctl_index);
     assert!(tmux_index < launchctl_index);
 }
@@ -270,6 +307,66 @@ fn server_setup_errors_when_remote_login_is_unavailable() {
     let err = apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap_err();
     let err_text = err.to_string();
     assert!(err_text.contains("Remote Login"));
+    assert!(err_text.contains("connection refused"));
+
+    assert!(!paths.config_file.exists());
+    assert!(!paths.state_file.exists());
+
+    let calls = runner.calls.borrow();
+    assert!(!calls.iter().any(|(program, _)| program == "tmux"));
+    assert!(!calls.iter().any(|(program, _)| program == "launchctl"));
+}
+
+#[test]
+fn server_setup_errors_when_et_service_start_fails() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::with_failure(
+        "brew",
+        vec![
+            "services".to_string(),
+            "start".to_string(),
+            "et".to_string(),
+        ],
+        "service failed",
+    );
+
+    let err = apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap_err();
+    let err_text = err.to_string();
+    assert!(err_text.contains("brew"));
+    assert!(err_text.contains("services"));
+    assert!(err_text.contains("service failed"));
+
+    assert!(!paths.config_file.exists());
+    assert!(!paths.state_file.exists());
+
+    let calls = runner.calls.borrow();
+    assert!(!calls.iter().any(|(program, _)| program == "tmux"));
+    assert!(!calls.iter().any(|(program, _)| program == "launchctl"));
+}
+
+#[test]
+fn server_setup_errors_when_et_server_port_is_unavailable_after_service_start() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::with_failure(
+        "nc",
+        vec![
+            "-G".to_string(),
+            "5".to_string(),
+            "-z".to_string(),
+            "localhost".to_string(),
+            "2022".to_string(),
+        ],
+        "connection refused",
+    );
+
+    let err = apply_server_setup(&paths, &store, &runner, "mac-mini".into()).unwrap_err();
+    let err_text = err.to_string();
+    assert!(err_text.contains("Eternal Terminal"));
+    assert!(err_text.contains("port 2022"));
     assert!(err_text.contains("connection refused"));
 
     assert!(!paths.config_file.exists());

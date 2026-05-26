@@ -167,6 +167,35 @@ fn verify_remote_login<R: Runner>(runner: &R) -> Result<()> {
     Err(anyhow!(message))
 }
 
+fn start_et_service<R: Runner>(runner: &R) -> Result<()> {
+    let args = vec!["services".into(), "start".into(), "et".into()];
+    run_checked(runner, "brew", &args).map(|_| ())
+}
+
+fn verify_et_server<R: Runner>(runner: &R) -> Result<()> {
+    let args = vec![
+        "-G".into(),
+        "5".into(),
+        "-z".into(),
+        "localhost".into(),
+        "2022".into(),
+    ];
+    let output = runner.run("nc", &args)?;
+    if output.success {
+        return Ok(());
+    }
+
+    let mut message = "Eternal Terminal server is not reachable on local port 2022 after `brew services start et`; run `brew services list` and check the `et` service before rerunning `eternalMac setup server`".to_string();
+    if !output.stderr.trim().is_empty() {
+        message.push_str(&format!("; stderr: {}", output.stderr.trim()));
+    }
+    if !output.stdout.trim().is_empty() {
+        message.push_str(&format!("; stdout: {}", output.stdout.trim()));
+    }
+
+    Err(anyhow!(message))
+}
+
 pub fn apply_server_setup<R: Runner>(
     paths: &Paths,
     store: &Store,
@@ -190,6 +219,8 @@ pub fn apply_server_setup<R: Runner>(
     let dns_name = resolve_server_dns(&parsed_status)?;
     let tailscale_ok = true;
     verify_remote_login(runner)?;
+    start_et_service(runner)?;
+    verify_et_server(runner)?;
 
     let default_session = "default".to_string();
 
