@@ -601,6 +601,67 @@ fn client_setup_persists_sync_pairs_and_creates_mutagen_sessions() {
 }
 
 #[test]
+fn client_setup_preserves_dotsync_metadata_and_passes_mutagen_ignores() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(tempdir.path().to_path_buf());
+    let store = Store::new(paths.clone());
+    let runner = FakeRunner::default();
+
+    apply_client_setup(
+        &paths,
+        &store,
+        &runner,
+        ClientSetupInput {
+            paired_server: "mac-mini.example.ts.net".into(),
+            server_ssh_user: "devuser".into(),
+            sync_roots: vec![SyncRootInput {
+                name: "dotsync-claude".into(),
+                local: "/Users/me/.claude".into(),
+                remote: "devuser@mac-mini.example.ts.net:~/.claude".into(),
+                ignore_paths: vec!["auth.json".into(), ".DS_Store".into()],
+                kind: Some("dotsync".into()),
+                label: Some("Claude Code".into()),
+            }],
+        },
+    )
+    .unwrap();
+
+    let config = store.load_config().unwrap();
+    let sync_pair = &config.client.as_ref().unwrap().sync_pairs[0];
+    assert_eq!(sync_pair.name, "dotsync-claude");
+    assert_eq!(sync_pair.ignore_paths, vec!["auth.json", ".DS_Store"]);
+    assert_eq!(sync_pair.kind.as_deref(), Some("dotsync"));
+    assert_eq!(sync_pair.label.as_deref(), Some("Claude Code"));
+
+    let state = store.load_state().unwrap();
+    let sync_state = &state.syncs[0];
+    assert_eq!(sync_state.name, "dotsync-claude");
+    assert_eq!(sync_state.ignore_paths, vec!["auth.json", ".DS_Store"]);
+    assert_eq!(sync_state.kind.as_deref(), Some("dotsync"));
+    assert_eq!(sync_state.label.as_deref(), Some("Claude Code"));
+
+    let calls = runner.calls.borrow();
+    assert!(calls.iter().any(|(program, args)| {
+        program == "mutagen"
+            && args
+                == &vec![
+                    "sync".to_string(),
+                    "create".to_string(),
+                    "--name".to_string(),
+                    "dotsync-claude".to_string(),
+                    "--sync-mode".to_string(),
+                    "two-way-resolved".to_string(),
+                    "--ignore".to_string(),
+                    "auth.json".to_string(),
+                    "--ignore".to_string(),
+                    ".DS_Store".to_string(),
+                    "/Users/me/.claude".to_string(),
+                    "devuser@mac-mini.example.ts.net:~/.claude".to_string(),
+                ]
+    }));
+}
+
+#[test]
 fn client_setup_errors_when_server_ssh_port_is_unreachable() {
     let tempdir = tempfile::tempdir().unwrap();
     let paths = Paths::new(tempdir.path().to_path_buf());
