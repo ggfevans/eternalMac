@@ -34,6 +34,13 @@ Public install command:
 brew install eternalmac/eternalmac/eternalmac
 ```
 
+No separate `brew tap` command is required for that fully qualified formula name. Homebrew will tap `eternalmac/eternalmac` automatically. Users who want the shorter command can run:
+
+```bash
+brew tap eternalmac/eternalmac
+brew install eternalmac
+```
+
 That tap name maps to a GitHub repository named `eternalMac/homebrew-eternalmac`.
 
 Audit before publishing:

@@ -41,10 +41,17 @@ The Mac Mini must have Remote Login enabled because Eternal Terminal and Mutagen
 
 ## Quick Start
 
-Install from the eternalMac Homebrew tap:
+Install from the eternalMac Homebrew tap in one command:
 
 ```bash
 brew install eternalmac/eternalmac/eternalmac
+```
+
+No separate `brew tap` command is required for the fully qualified install command above. Homebrew will tap `eternalmac/eternalmac` automatically. If you prefer the shorter install command later, run:
+
+```bash
+brew tap eternalmac/eternalmac
+brew install eternalmac
 ```
 
 On the Mac Mini:
