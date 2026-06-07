@@ -5,25 +5,46 @@
 
 version: 2
 updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
   - package-ecosystem: "npm"
-    directory: "/website/" # marketing website path
+    directory: "/website/"
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
       - "npm"
+    open-pull-requests-limit: 10
     groups:
       npm-production:
         patterns:
           - "*"
-  - package-ecosystem: "cargo" 
-    directory: "/" # app rust root path
+        dependency-type: "production"
+      npm-dev:
+        patterns:
+          - "*"
+        dependency-type: "development"
+
+  - package-ecosystem: "cargo"
+    directory: "/"
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
       - "rust"
+    open-pull-requests-limit: 10
     groups:
       rust-production:
         patterns:
           - "*"
+        dependency-type: "production"
+      rust-dev:
+        patterns:
+          - "*"
+        dependency-type: "development"
