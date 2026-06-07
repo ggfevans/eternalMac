@@ -9,6 +9,13 @@ updates:
     directory: "/website/" # Location of package manifests
     schedule:
       interval: "weekly"
+    labels:
+      - "dependencies"
+      - "npm"
+    groups:
+      npm-production:
+        patterns:
+          - "*"
   - package-ecosystem: "rust" # See documentation for possible values
     directory: "/" # Location of package manifests
     schedule:
